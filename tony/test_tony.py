@@ -8,11 +8,11 @@ from integration_tests.dataproc_test_case import DataprocTestCase
 class TonYTestCase(DataprocTestCase):
     COMPONENT = 'tony'
     INIT_ACTIONS = ['tony/tony.sh']
-    TONY_VERSION = '0.3.1'
+    TONY_VERSION = '0.3.23'
 
     @parameterized.expand(
         [
-            ("STANDARD", "1.3"),
+            ("STANDARD", "1.4"),
         ],
         testcase_func_name=DataprocTestCase.generate_verbose_test_name)
     def test_tony(self, configuration, dataproc_version):
@@ -29,7 +29,7 @@ class TonYTestCase(DataprocTestCase):
                 --conf_file=/opt/tony/TonY-samples/jobs/TFJob/tony.xml \
                 --executes mnist_distributed.py \
                 --python_venv=/opt/tony/TonY-samples/deps/tf.zip \
-                --python_binary_path=tf/bin/python3.5
+                --python_binary_path=tf/bin/python3.6
             '''.format(self.name, self.TONY_VERSION)
         ret_code, stdout, stderr = self.run_command(cmd)
         self.assertEqual(
@@ -48,7 +48,7 @@ class TonYTestCase(DataprocTestCase):
                 --conf_file=/opt/tony/TonY-samples/jobs/PTJob/tony.xml \
                 --executes mnist_distributed.py \
                 --python_venv=/opt/tony/TonY-samples/deps/pytorch.zip \
-                --python_binary_path=pytorch/bin/python3.5
+                --python_binary_path=pytorch/bin/python3.6
             '''.format(self.name, self.TONY_VERSION)
         ret_code, stdout, stderr = self.run_command(cmd)
         self.assertEqual(

@@ -73,7 +73,7 @@ You can easily test TonY is running by using ```validate.sh ${cluster_prefix} ${
 * ```cluster_prefix``` argument sets a prefix in created cluster name
 * ```bucket_name``` argument sets a place where init action will be placed
 
-This script is used for testing TonY using 1.3 Dataproc images with standard configurations. 
+This script is used for testing TonY using 1.4 Dataproc images with standard configurations. 
 After clusters are created, script submits Hadoop jobs on them.
 
 
@@ -81,5 +81,5 @@ After clusters are created, script submits Hadoop jobs on them.
 
 * This script will install TonY in the master node only
 * Virtual environments are installed for both TensorFlow and PyTorch examples.
-* TonY is supported with STANDARD configuration (1 master/2+ workers) in Dataproc 1.3.
+* TonY is supported with STANDARD configuration (1 master/2+ workers) in Dataproc 1.4
 * TonY supports GPU using Hadoop 3.1 (YARN-6223). Currently not supported with Dataproc

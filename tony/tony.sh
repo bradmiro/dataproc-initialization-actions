@@ -19,7 +19,7 @@ set -euxo pipefail
 # TonY settings
 readonly TONY_INSTALL_FOLDER='/opt/tony/'
 readonly TONY_SAMPLES_FOLDER="${TONY_INSTALL_FOLDER}/TonY-samples"
-readonly TONY_DEFAULT_VERSION='6273f16d9c0597b3715a04645445aeedc495baf8' # v0.3.1
+readonly TONY_DEFAULT_VERSION='43378363d753b6e1890482ae177e2c9d21849640' # v0.3.23
 
 # Tony configurations: https://github.com/linkedin/TonY/wiki/TonY-Configurations
 readonly PS_INSTANCES=1
@@ -29,10 +29,10 @@ readonly WORKER_MEMORY='4g'
 readonly WORKER_GPUS=0 # GPU isolation is not supported in Dataproc 1.3
 
 # ML frameworks versions
-readonly TENSORFLOW_VERSION='1.13.1'
+readonly TENSORFLOW_VERSION='1.15.0'
 readonly TENSORFLOW_GPU=false
-readonly PYTORCH_VERSION='0.4.1'
-readonly TORCHVISION_VERSION='0.2.1'
+readonly PYTORCH_VERSION='1.0.2'
+readonly TORCHVISION_VERSION='0.5.0'
 
 function err() {
   echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
