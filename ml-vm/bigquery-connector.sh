@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# This script installs xgboost4j on all nodes of a Cloud Dataproc cluster
+# This script installs the bigquery-connector on all nodes of a Cloud Dataproc cluster
 
 readonly INSTALL_FOLDER="$1"
-readonly VERSION=0.90
-readonly URL=https://search.maven.org/remotecontent?filepath=ml/dmlc/xgboost4j-spark/"${VERSION}"/xgboost4j-spark-"${VERSION}".jar
+readonly VERSION=0.13.4-hadoop2
+readonly URL=https://search.maven.org/remotecontent?filepath=com/google/cloud/bigdataoss/bigquery-connector/${VERSION}/bigquery-connector-${VERSION}.jar
 
 curl -L -O "${URL}"
 
-mv xgboost4j-spark-"${VERSION}".jar "${INSTALL_FOLDER}"
-
-pip3 install xgboost
+mv bigquery-connector-"${VERSION}".jar "${INSTALL_FOLDER}"
