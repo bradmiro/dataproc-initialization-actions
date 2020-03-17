@@ -1,33 +1,16 @@
-set -e
+#!/bin/bash
 
-# Spark Conf
-readonly SPARK_CONF=/etc/spark/conf/spark-defaults.conf
-readonly SPARK_EXTRA_JARS=/opt/spark/spark-extra-jars/
-readonly WORKING_DIR=/opt
+set -euxo pipefail
+
 readonly REGION=us-east1
 readonly INIT_ACTIONS=gs://goog-dataproc-initialization-actions-us-east1/python/
+readonly JARS_DIR=/usr/lib/spark/jars
 
-mkdir -p ${SPARK_EXTRA_JARS}
-
-cd ${WORKING_DIR}
-git clone https://github.com/GoogleCloudDataproc/initialization-actions
-cd initialization-actions
-
-echo "Installing TonY"
-echo "Skipping"
-bash tony/tony.sh >> /dev/null 
-
-echo "Installing GPU Drivers"
-bash gpu/install_gpu_driver.sh
-
-# Go home
-cd ${WORKING_DIR}
-
-pip_dependenciess=(
+pip_dependencies=(
   wrapt
 )
 
-pip_packages = (
+pip_packages=(
   google-cloud-bigquery
   google-cloud-datalabeling
   google-cloud-storage
@@ -35,7 +18,7 @@ pip_packages = (
   google-cloud-dataproc
   google-api-python-client
   mxnet
-  tensorflow==1.15.0
+  "tensorflow==1.15.0"
   numpy
   scikit-learn
   keras
@@ -48,6 +31,37 @@ pip_packages = (
   torchvision
 )
 
+declare -A JAR_VERSIONS
+JAR_VERSIONS=(
+  ["graphframes"]="0.7.0-spark2.4-s_2.11"
+  ["spark-deep-learning"]="1.5.0-spark2.4-s_2.11"
+  ["xgboost4j-spark"]="0.90"
+  ["spark-tensorflow-connector_2.11"]="1.6.0"
+  ["tensorframes"]="0.8.2-s_2.11"
+)
+
+declare -A JAR_REPOS=(
+  ["graphframes"]="http://dl.bintray.com/spark-packages/maven/graphframes"
+  ["spark-deep-learning"]="http://dl.bintray.com/spark-packages/maven/databricks"
+  ["xgboost4j-spark"]="https://repo1.maven.org/maven2/ml/dmlc"
+  ["spark-tensorflow-connector_2.11"]="https://kompics.sics.se/maven/repository/org/tensorflow/"
+  ["tensorframes"]="https://dl.bintray.com/spark-packages/maven/databricks"
+)
+
+# cd ${WORKING_DIR}
+# git clone https://github.com/GoogleCloudDataproc/initialization-actions
+# cd initialization-actions
+
+# echo "Installing TonY"
+# echo "Skipping"
+# bash tony/tony.sh >> /dev/null 
+
+# echo "Installing GPU Drivers"
+# bash gpu/install_gpu_driver.sh
+
+# echo "Installing Spark-Bigquery and Hadoop Bigquery Connector"
+# bash connectors/connectors.sh <SPARK_BIGQUERY> <BIGQUERY>
+
 function install_pip() {
   echo "Installing pip..."
   apt-get -y update
@@ -56,52 +70,39 @@ function install_pip() {
 }
 
 function install_pip_packages() {
-  echo "Installing pip packages"
-  pip install -U ${pip_dependencies[@]}
-  pip install -U ${pip_packages[@]}
+  echo "Installing pip packages..."
+  pip install -U "${pip_dependencies[@]}"
+  pip install -U "${pip_packages[@]}"
 }
 
+function install_from_maven() {
+  local -r name=$1
+  local -r version=${JAR_VERSIONS[${name}]}
+  local -r repo=${JAR_REPOS[${name}]}
 
-function install_spark_bigquery_connector() {
-  echo "Installing spark-bigquery-connector"
-  readonly SPARK_BIGQUERY_CONNECTOR_LOCATION=gs://spark-lib/bigquery/spark-bigquery-latest.jar
-  gsutil cp "${SPARK_BIGQUERY_CONNECTOR_LOCATION}" "${SPARK_EXTRA_JARS}/spark-bigquery-latest.jar"
+  url="${repo}/${name}/${version}/${name}-${version}.jar"
+
+  local -r jar_name="${url##*/}"
+
+  echo "Installing '${name}' from maven..."
+  #curl -L -O --fail $url #wget?
+  wget -nv --timeout=30 --tries=5 --retry-connrefused "${url}" -O ${JARS_DIR}/jar_name
+
+  local -r jar_name="${url##*/}"
+
+  ln -s -f "${JARS_DIR}/${jar_name}" "${JARS_DIR}/${name}.jar"
 }
 
-function install_graphframes() {
-  echo "Installing graphframes"
-  readonly GRAPHFRAMES_VERSION=0.7.0-spark2.4-s_2.11
-  readonly GRAPHFRAMES_INSTALL_FOLDER="$1"
-
-  curl -L -O http://dl.bintray.com/spark-packages/maven/graphframes/graphframes/"${GRAPHFRAMES_VERSION}"/graphframes-"${GRAPHFRAMES_VERSION}".jar
-
-  mv "graphframes-${GRAPHFRAMES_VERSION}.jar" "${SPARK_EXTRA_JARS}/graphframes-${GRAPHFRAMES_VERSION}.jar"
+function install_maven_packages() {
+  echo "Installing maven packages..."
+  for package in "${!JAR_REPOS[@]}"; do
+    install_from_maven "${package}"
+  done
 }
-
-function install_spark_deep_learning() {
-  echo "Installing spark-deep-learning"
-  readonly SPARK_DEEP_LEARNING_LOCATION=http://dl.bintray.com/spark-packages/maven/databricks/spark-deep-learning/1.5.0-spark2.4-s_2.11/spark-deep-learning-1.5.0-spark2.4-s_2.11.jar # 0.13.0
-
-  curl -L -O "${SPARK_DEEP_LEARNING_LOCATION}"
-
-  mv "spark-deep-learning-1.5.0-spark2.4-s_2.11.jar" "${SPARK_EXTRA_JARS}/spark-deep-learning-1.5.0-spark2.4-s_2.11.jar"
-}
-
-function install_xgboost4j() {
-  echo "Installing xgboost4jspark (and xgboost)"
-  readonly VERSION=0.90
-  readonly URL=https://search.maven.org/remotecontent?filepath=ml/dmlc/xgboost4j-spark/"${VERSION}"/xgboost4j-spark-"${VERSION}".jar
-
-  curl -L -O "${URL}"
-  mv "xgboost4j-spark-${VERSION}.jar" "${SPARK_EXTRA_JARS}/xgboost4j-spark-${VERSION}.jar"
-}
-
 
 function install_sparklyr() {
   # sparklyr
   echo "Installing sparklyr"
-  readonly SPARKLYR_INSTALL_FOLDER=/opt/sparklyr
-  readonly SPARKLYR_SAMPLES_FOLDER=${SPARKLYR_INSTALL_FOLDER}/examples
 
   #apt-get update
   apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev
@@ -114,41 +115,12 @@ function install_sparklyr() {
   Rscript -e 'install.packages("sparkbq", repo="https://cran.rstudio.com")'
   echo "SPARKBG INSTALLED SUCCESSFULLY"
 }
-#install_r > /dev/null
-#bash sparklyr.sh
-
-
-#bash spark-nlp.sh
-
-function edit_spark_conf() {
-  class_path=""
-  for jar in ${SPARK_EXTRA_JARS}/*; do
-      class_path="${class_path}:${jar}"
-  done
-
-  if grep -q "spark.driver.extraClassPath" "${SPARK_CONF}"; then
-      grep -q "spark.driver.extraClassPath" | sed -i "s/$/${classpath}" "${SPARK_CONF}"
-  else
-      echo -e "\n#Spark Driver Extra Jars stored here" >> "${SPARK_CONF}"
-      echo -e "spark.driver.extraClassPath=${class_path}" >> "${SPARK_CONF}"
-  fi
-
-  if grep -q "spark.executor.extraClassPath" "${SPARK_CONF}"; then
-      grep -q "spark.executor.extraClassPath" | sed -i "s/$/${classpath}" "${SPARK_CONF}"
-  else
-      echo -e "\n#Spark Executor Extra Jars stored here" >> "${SPARK_CONF}"
-      echo -e "spark.executor.extraClassPath=${class_path}" >> "${SPARK_CONF}"
-  fi
-}
 
 install_pip
 install_pip_packages
 install_spark_bigquery_connector
-install_graphframes
-install_spark_deep_learning
-install_xgboost4j
+install_maven_packages
 install_sparklyr
-edit_spark_conf
 
 # # rapids
 # cd dataproc
@@ -161,13 +133,6 @@ edit_spark_conf
 # bash bigquery-connector.sh
 
 # #======
-
-# # tensorframes
-# bash tensorframes.sh
-
-
-# # spark-tensorflow-connector 
-# bash spark-tensorflow-connector.sh
 
 # # ai platform data labeling service (?)
 # bash ai-platform-dls.sh
@@ -189,8 +154,5 @@ edit_spark_conf
 
 # # DL4J
 # bash dl4j.sh
-
-# # Keras
-# bash keras.sh
 
 # # Horovod
