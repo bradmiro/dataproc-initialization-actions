@@ -3,32 +3,45 @@
 set -euxo pipefail
 
 readonly REGION=us-east1
-readonly INIT_ACTIONS=gs://goog-dataproc-initialization-actions-us-east1/python/
+readonly INIT_ACTIONS=gs://goog-dataproc-initialization-actions-${REGION}
+readonly INIT_ACTIONS_LOCAL=/opt/init-actions
 readonly JARS_DIR=/usr/lib/spark/jars
+readonly CONNECTORS_DIR=/usr/local/share/google/dataproc/lib
+
+mkdir -p ${JARS_DIR}
+mkdir -p ${CONNECTORS_DIR}
+mkdir -p ${INIT_ACTIONS_LOCAL}
 
 pip_dependencies=(
-  wrapt
+  "wrapt"
 )
 
 pip_packages=(
-  google-cloud-bigquery
-  google-cloud-datalabeling
-  google-cloud-storage
-  google-cloud-bigtable
-  google-cloud-dataproc
-  google-api-python-client
-  mxnet
+  "google-cloud-bigquery"
+  "google-cloud-datalabeling"
+  "google-cloud-storage"
+  "google-cloud-bigtable"
+  "google-cloud-dataproc"
+  "google-api-python-client"
+  "mxnet"
   "tensorflow==1.15.0"
-  numpy
-  scikit-learn
-  keras
-  graphframes
-  spark-nlp
-  xgboost
-  sparkdl
-  mlflow
-  torch
-  torchvision
+  "numpy"
+  "scikit-learn"
+  "keras"
+  "graphframes"
+  "spark-nlp"
+  "xgboost"
+  "sparkdl"
+  "mlflow"
+  "torch"
+  "torchvision"
+)
+
+declare -A CONNECTOR_VERSIONS
+CONNECTOR_VERSIONS=(
+  ["bigquery"]="1.1.1"
+  ["gcs"]="2.1.1"
+  ["spark-bigquery"]="0.13.1-beta"
 )
 
 declare -A JAR_VERSIONS
@@ -48,31 +61,28 @@ declare -A JAR_REPOS=(
   ["tensorframes"]="https://dl.bintray.com/spark-packages/maven/databricks"
 )
 
-# cd ${WORKING_DIR}
-# git clone https://github.com/GoogleCloudDataproc/initialization-actions
-# cd initialization-actions
+function install_init_actions() {
+  gsutil cp -r ${INIT_ACTIONS}/tony ${INIT_ACTIONS_LOCAL}
+  gsutil cp -r ${INIT_ACTIONS}/gpu ${INIT_ACTIONS_LOCAL}
 
-# echo "Installing TonY"
-# echo "Skipping"
-# bash tony/tony.sh >> /dev/null 
+  echo "Installing TonY"
+  bash ${INIT_ACTIONS_LOCAL}/tony/tony.sh >> /dev/null 
 
-# echo "Installing GPU Drivers"
-# bash gpu/install_gpu_driver.sh
-
-# echo "Installing Spark-Bigquery and Hadoop Bigquery Connector"
-# bash connectors/connectors.sh <SPARK_BIGQUERY> <BIGQUERY>
+  echo "Installing GPU Drivers"
+  bash ${INIT_ACTIONS_LOCAL}/gpu/install_gpu_driver.sh
+}
 
 function install_pip() {
   echo "Installing pip..."
   apt-get -y update
-  apt install python-dev python-pip -y
-  pip install --upgrade pip
+  apt install python-dev python3-pip -y
+  pip3 install --upgrade pip
 }
 
 function install_pip_packages() {
   echo "Installing pip packages..."
-  pip install -U "${pip_dependencies[@]}"
-  pip install -U "${pip_packages[@]}"
+  pip3 install -U "${pip_dependencies[@]}"
+  pip3 install -U "${pip_packages[@]}"
 }
 
 function install_from_maven() {
@@ -100,7 +110,33 @@ function install_maven_packages() {
   done
 }
 
-function install_sparklyr() {
+function install_connectors() {
+  local -r CONNECTORS=(
+      "bigquery"
+      "gcs"
+      "spark-bigquery"
+  )
+
+  for name in "${CONNECTORS[@]}"; do
+    version="${CONNECTOR_VERSIONS[$name]}"
+    if [[ ${name} == spark-bigquery ]]; then
+      local url="gs://spark-lib/bigquery/spark-bigquery-with-dependencies_2.12-${version}.jar"
+    fi 
+
+    if [[ ${name} == gcs || ${name} == bigquery ]]; then
+      local url="gs://hadoop-lib/${name}/${name}-connector-hadoop2-${version}.jar"
+    fi
+
+    gsutil cp "${url}" "${CONNECTORS_DIR}/"
+
+    local jar_name=${url##*/}
+
+    # Update or create version-less connector link
+    ln -s -f "${CONNECTORS_DIR}/${jar_name}" "${CONNECTORS_DIR}/${name}-connector.jar"
+  done
+}
+
+function install_sparklyr_and_sparkbq() {
   # sparklyr
   echo "Installing sparklyr"
 
@@ -116,11 +152,14 @@ function install_sparklyr() {
   echo "SPARKBG INSTALLED SUCCESSFULLY"
 }
 
+
 install_pip
 install_pip_packages
+#install_init_actions
+install_connectors
 install_spark_bigquery_connector
 install_maven_packages
-install_sparklyr
+install_sparklyr_and_sparkbq
 
 # # rapids
 # cd dataproc
@@ -129,8 +168,6 @@ install_sparklyr
 
 # # cd ${WORKING_DIR}/GoogleCloudDataproc/initialization-actions/rapids
 
-# # bigquery connector (MapReduce)
-# bash bigquery-connector.sh
 
 # #======
 
@@ -145,9 +182,6 @@ install_sparklyr
 
 # # MxNet
 # bash mxnet.sh
-
-# # SparkBQ
-# bash sparkbq.sh
 
 # # H2O AI Sparkling Water
 # bash h2oai.sh
