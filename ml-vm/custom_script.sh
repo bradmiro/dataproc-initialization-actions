@@ -24,7 +24,7 @@ pip_packages=(
   "google-cloud-dataproc"
   "google-api-python-client"
   "mxnet"
-  "tensorflow==1.15.0"
+  "tensorflow"
   "numpy"
   "scikit-learn"
   "keras"
@@ -53,24 +53,44 @@ JAR_VERSIONS=(
   ["tensorframes"]="0.8.2-s_2.11"
 )
 
+  local -r repo_url='https://repo1.maven.org/maven2/ai/rapids'
+
+  if [[ "${CUDA_VERSION}" == "10.0" ]]; then
+    local -r cudf_cuda_version="10"
+  else
+    local -r cudf_cuda_version="${CUDA_VERSION//\./-}"
+  fi
+
+  wget -nv --timeout=30 --tries=5 --retry-connrefused \
+    "${repo_url}/xgboost4j-spark_${RAPIDS_SPARK_VERSION}/${RAPIDS_VERSION}/xgboost4j-spark_${RAPIDS_SPARK_VERSION}-${RAPIDS_VERSION}.jar" \
+    -P /usr/lib/spark/jars/
+  wget -nv --timeout=30 --tries=5 --retry-connrefused \
+    "${repo_url}/xgboost4j_${RAPIDS_SPARK_VERSION}/${RAPIDS_VERSION}/xgboost4j_${RAPIDS_SPARK_VERSION}-${RAPIDS_VERSION}.jar" \
+    -P /usr/lib/spark/jars/
+  wget -nv --timeout=30 --tries=5 --retry-connrefused \
+    "${repo_url}/cudf/${CUDF_VERSION}/cudf-${CUDF_VERSION}-cuda${cudf_cuda_version}.jar" \
+    -P ${JARS_DIR}
+
 declare -A JAR_REPOS=(
   ["graphframes"]="http://dl.bintray.com/spark-packages/maven/graphframes"
   ["spark-deep-learning"]="http://dl.bintray.com/spark-packages/maven/databricks"
-  ["xgboost4j-spark"]="https://repo1.maven.org/maven2/ml/dmlc"
+  ["cudf"]='https://repo1.maven.org/maven2/ai/rapids'
+  ["xgboost4j"]='https://repo1.maven.org/maven2/ai/rapids'
+  ["xgboost4j-spark"]='https://repo1.maven.org/maven2/ai/rapids'
   ["spark-tensorflow-connector_2.11"]="https://kompics.sics.se/maven/repository/org/tensorflow/"
   ["tensorframes"]="https://dl.bintray.com/spark-packages/maven/databricks"
 )
 
-function install_init_actions() {
-  gsutil cp -r ${INIT_ACTIONS}/tony ${INIT_ACTIONS_LOCAL}
-  gsutil cp -r ${INIT_ACTIONS}/gpu ${INIT_ACTIONS_LOCAL}
+# function install_init_actions() {
+#   gsutil cp -r ${INIT_ACTIONS}/tony ${INIT_ACTIONS_LOCAL}
+#   gsutil cp -r ${INIT_ACTIONS}/gpu ${INIT_ACTIONS_LOCAL}
 
-  echo "Installing TonY"
-  bash ${INIT_ACTIONS_LOCAL}/tony/tony.sh >> /dev/null 
+#   echo "Installing TonY"
+#   bash ${INIT_ACTIONS_LOCAL}/tony/tony.sh >> /dev/null 
 
-  echo "Installing GPU Drivers"
-  bash ${INIT_ACTIONS_LOCAL}/gpu/install_gpu_driver.sh
-}
+#   echo "Installing GPU Drivers"
+#   bash ${INIT_ACTIONS_LOCAL}/gpu/install_gpu_driver.sh
+# }
 
 function install_pip() {
   echo "Installing pip..."
@@ -85,20 +105,32 @@ function install_pip_packages() {
   pip3 install -U "${pip_packages[@]}"
 }
 
+function install_rapids() {
+  local -r repo_url='https://repo1.maven.org/maven2/ai/rapids'
+  local -r CUDA_VERSION="10.0"
+  local -r cudf_cuda_version="10"
+
+  wget -nv --timeout=30 --tries=5 --retry-connrefused \
+    "${repo_url}/xgboost4j-spark_${RAPIDS_SPARK_VERSION}/${RAPIDS_VERSION}/xgboost4j-spark_${RAPIDS_SPARK_VERSION}-${RAPIDS_VERSION}.jar" \
+    -P${JARS_DIR}
+  wget -nv --timeout=30 --tries=5 --retry-connrefused \
+    "${repo_url}/xgboost4j_${RAPIDS_SPARK_VERSION}/${RAPIDS_VERSION}/xgboost4j_${RAPIDS_SPARK_VERSION}-${RAPIDS_VERSION}.jar" \
+    -P ${JARS_DIR}
+  wget -nv --timeout=30 --tries=5 --retry-connrefused \
+    "${repo_url}/cudf/${CUDF_VERSION}/cudf-${CUDF_VERSION}-cuda${cudf_cuda_version}.jar" \
+    -P ${JARS_DIR}
+}
 function install_from_maven() {
   local -r name=$1
   local -r version=${JAR_VERSIONS[${name}]}
   local -r repo=${JAR_REPOS[${name}]}
+  local -r jar_name="${name}-${version}.jar"
 
-  url="${repo}/${name}/${version}/${name}-${version}.jar"
-
-  local -r jar_name="${url##*/}"
+  url="${repo}/${name}/${version}/${jar_name}"
 
   echo "Installing '${name}' from maven..."
   #curl -L -O --fail $url #wget?
-  wget -nv --timeout=30 --tries=5 --retry-connrefused "${url}" -O ${JARS_DIR}/jar_name
-
-  local -r jar_name="${url##*/}"
+  wget -nv --timeout=30 --tries=5 --retry-connrefused "${url}" -O "${JARS_DIR}/${jar_name}"
 
   ln -s -f "${JARS_DIR}/${jar_name}" "${JARS_DIR}/${name}.jar"
 }
@@ -157,7 +189,6 @@ install_pip
 install_pip_packages
 #install_init_actions
 install_connectors
-install_spark_bigquery_connector
 install_maven_packages
 install_sparklyr_and_sparkbq
 
