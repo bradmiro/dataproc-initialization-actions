@@ -3,6 +3,7 @@
 set -euxo pipefail
 
 ## Set Spark and Sparkling water versions
+# readonly DEFAULT_H2O_SPARKLING_WATER_VERSION="3.30.0.6-1"
 readonly DEFAULT_H2O_SPARKLING_WATER_VERSION="3.28.0.3-1"
 readonly H2O_SPARKLING_WATER_VERSION="$(/usr/share/google/get_metadata_value attributes/H2O_SPARKLING_WATER_VERSION || echo ${DEFAULT_H2O_SPARKLING_WATER_VERSION})"
 
@@ -12,6 +13,26 @@ readonly SPARKLING_WATER_NAME="sparkling-water-${H2O_SPARKLING_WATER_VERSION}-${
 readonly SPARKLING_WATER_URL="http://h2o-release.s3.amazonaws.com/sparkling-water/spark-${SPARK_VERSION}/${H2O_SPARKLING_WATER_VERSION}-${SPARK_VERSION}/${SPARKLING_WATER_NAME}.zip"
 
 readonly PYSPARKLING_WATER="h2o_pysparkling_${SPARK_VERSION}"
+
+function install_sparking_water_dataproc_1_5() {
+  local tmp_dir
+  tmp_dir=$(mktemp -d -t init-action-h2o-XXXX)
+  
+  git clone --branch rel-3.30.1 https://github.com/h2oai/sparkling-water.git ${tmp_dir}/sparkling-water
+  ${tmp_dir}/sparkling-water/gradlew -p ${tmp_dir}/sparkling-water clean dist -PscalaBaseVersion=2.12
+
+  unzip -q "${tmp_dir}/sparkling-water/dist/build/dist/sparkling-water-${H2O_SPARKLING_WATER_VERSION}-3.0.zip" -d /usr/lib/
+  ln -s "/usr/lib/sparkling-water-${H2O_SPARKLING_WATER_VERSION}-3.0" /usr/lib/sparkling-water
+
+  ## Fix $TOPDIR variable resolution in Sparkling scripts
+  sed -i 's|TOPDIR=.*|TOPDIR=$(cd "$(dirname "$(readlink -f "$0")")/.."; pwd)|g' \
+    /usr/lib/sparkling-water/bin/sparkling-shell \
+    /usr/lib/sparkling-water/bin/pysparkling
+
+  ## Create Symlink entries for default
+  ln -s /usr/lib/sparkling-water/bin/sparkling-shell /usr/bin/
+  ln -s /usr/lib/sparkling-water/bin/pysparkling /usr/bin/
+}
 
 # Install Scala packages for H2O Sparkling Water
 function install_sparkling_water() {
@@ -55,7 +76,11 @@ EOF
 
 function main() {
   echo "BEGIN Stage 1 : Install H2O libraries and dependencies"
+  # if [[ "$DATAPROC_VERSION" == "1.5" ]]; then
+  #   install_sparking_water_dataproc_1_5
+  # else
   install_sparkling_water
+  # fi
   install_pysparkling_water
   echo "END Stage 1 : Successfully Installed H2O libraries and dependencies"
 
