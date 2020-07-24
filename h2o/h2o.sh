@@ -3,8 +3,7 @@
 set -euxo pipefail
 
 ## Set Spark and Sparkling water versions
-readonly H2O_BUILD_BRANCH="rel-3.30"
-readonly DEFAULT_H2O_SPARKLING_WATER_VERSION="3.30.0.7-1"
+readonly DEFAULT_H2O_SPARKLING_WATER_VERSION="3.30.0.6-1"
 readonly H2O_SPARKLING_WATER_VERSION="$(/usr/share/google/get_metadata_value attributes/H2O_SPARKLING_WATER_VERSION || echo ${DEFAULT_H2O_SPARKLING_WATER_VERSION})"
 
 readonly SPARK_VERSION=$(spark-submit --version 2>&1 | sed -n 's/.*version[[:blank:]]\+\([0-9]\+\.[0-9]\).*/\1/p' | head -n1)
@@ -18,11 +17,11 @@ function install_sparking_water_dataproc_1_5() {
   local tmp_dir
   tmp_dir=$(mktemp -d -t init-action-h2o-XXXX)
 
-  git clone --branch ${H2O_BUILD_BRANCH} https://github.com/h2oai/sparkling-water.git ${tmp_dir}/sparkling-water
-  ${tmp_dir}/sparkling-water/gradlew -p ${tmp_dir}/sparkling-water clean dist -PscalaBaseVersion=2.12
+  git clone --branch RELEASE-${H2O_SPARKLING_WATER_VERSION} https://github.com/h2oai/sparkling-water.git ${tmp_dir}/sparkling-water
+  ${tmp_dir}/sparkling-water/gradlew -p ${tmp_dir}/sparkling-water dist -PscalaBaseVersion=2.12 -Pspark=2.4
 
-  unzip -q "${tmp_dir}/sparkling-water/dist/build/dist/sparkling-water-${H2O_SPARKLING_WATER_VERSION}-3.0.zip" -d /usr/lib/
-  ln -s "/usr/lib/sparkling-water-${H2O_SPARKLING_WATER_VERSION}-3.0" /usr/lib/sparkling-water
+  unzip -q "${tmp_dir}/sparkling-water/dist/build/dist/${SPARKLING_WATER_NAME}.zip" -d /usr/lib/
+  ln -s "/usr/lib/${SPARKLING_WATER_NAME}" /usr/lib/sparkling-water
 
   ## Fix $TOPDIR variable resolution in Sparkling scripts
   sed -i 's|TOPDIR=.*|TOPDIR=$(cd "$(dirname "$(readlink -f "$0")")/.."; pwd)|g' \
@@ -58,7 +57,7 @@ function install_sparkling_water() {
 function install_pysparkling_water() {
   pip install -U \
     requests tabulate future colorama scikit-learn google-cloud-bigquery google-cloud-storage \
-    h2o "$PYSPARKLING_WATER"
+    h2o "$PYSPARKLING_WATER==${H2O_SPARKLING_WATER_VERSION}"
 }
 
 # Tune Spark defaults for H2O Sparkling water
