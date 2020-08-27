@@ -3,7 +3,7 @@
 set -euxo pipefail
 
 ## Set Spark and Sparkling water versions
-readonly DEFAULT_H2O_SPARKLING_WATER_VERSION="3.30.0.6-1"
+readonly DEFAULT_H2O_SPARKLING_WATER_VERSION="3.30.1.1-1"
 readonly H2O_SPARKLING_WATER_VERSION="$(/usr/share/google/get_metadata_value attributes/H2O_SPARKLING_WATER_VERSION || echo ${DEFAULT_H2O_SPARKLING_WATER_VERSION})"
 
 readonly SPARK_VERSION=$(spark-submit --version 2>&1 | sed -n 's/.*version[[:blank:]]\+\([0-9]\+\.[0-9]\).*/\1/p' | head -n1)
@@ -18,7 +18,7 @@ function install_sparking_water_dataproc_1_5() {
   tmp_dir=$(mktemp -d -t init-action-h2o-XXXX)
 
   git clone --branch RELEASE-${H2O_SPARKLING_WATER_VERSION} https://github.com/h2oai/sparkling-water.git ${tmp_dir}/sparkling-water
-  ${tmp_dir}/sparkling-water/gradlew -p ${tmp_dir}/sparkling-water dist -PscalaBaseVersion=2.12 -Pspark=2.4
+  ${tmp_dir}/sparkling-water/gradlew -p ${tmp_dir}/sparkling-water dist -PscalaBaseVersion=2.12 -Pspark=2.4 -PsparkVersion=2.4.6 --stacktrace
 
   unzip -q "${tmp_dir}/sparkling-water/dist/build/dist/${SPARKLING_WATER_NAME}.zip" -d /usr/lib/
   ln -s "/usr/lib/${SPARKLING_WATER_NAME}" /usr/lib/sparkling-water
@@ -84,7 +84,7 @@ function main() {
   echo "END Stage 1 : Successfully Installed H2O libraries and dependencies"
 
   echo "BEGIN Stage 2 : Tuning Spark configuration in spark-defaults.conf"
-  tune_spark_defaults
+  #tune_spark_defaults
   echo "END Stage 2 : Successfully tuned Spark configuration in spark-defaults.conf"
 }
 
