@@ -34,8 +34,14 @@ readonly SPARK_BIGQUERY_VERSION="$(/usr/share/google/get_metadata_value attribut
   echo "0.17.0")"
 
 readonly R_VERSION="$(R --version | sed -n 's/.*version[[:blank:]]\+\([0-9]\+\.[0-9]\).*/\1/p')"
-readonly TENSORFLOW_VERSION="2.3.*"
+readonly TENSORFLOW_VERSION="2.4.*"
 readonly SPARK_NLP_VERSION="2.6.3" # Must include subminor version here
+readonly CUDA_VERSION="$(/usr/share/google/get_metadata_value attributes/cuda-version || echo "11.0")"
+readonly CUDNN_VERSION="8.0.4.30-1"
+
+min_version() {
+  echo -e "$1\n$2" | sort -r -t'.' -n -k1,1 -k2,2 -k3,3 | tail -n1
+}
 
 CONDA_PACKAGES=(
   "r-dplyr=1.0"
@@ -53,6 +59,10 @@ CONDA_PACKAGES=(
 if [[ -z ${RAPIDS_RUNTIME} ]]; then
   CONDA_PACKAGES+=("r-xgboost=1.2")
 fi
+
+if [[ -n ${INCLUDE_GPUS} ]]; then
+  CONDA_PACKAGES+=("cudatoolkit=${CUDA_VERSION}")
+fi
 readonly CONDA_PACKAGES
 
 PIP_PACKAGES=(
@@ -63,15 +73,18 @@ PIP_PACKAGES=(
   "tensorflow-datasets==3.2.*"
   "tensorflow-estimator==${TENSORFLOW_VERSION}"
   "tensorflow-hub==0.8.*"
-  "tensorflow-io==0.15.*"
+  "tensorflow-io==0.17.*"
   "tensorflow-probability==0.11.*"
 )
-if [[ -n ${INCLUDE_GPUS} ]]; then
+
+# Tensorflow has separate GPU/CPU versions for Tensorflow 1.x
+if [[ -n ${INCLUDE_GPUS} ]] && [[ $(min_version "${TENSORFLOW_VERSION}" 2.0) != 2.0 ]]; then
   PIP_PACKAGES+=("tensorflow-gpu==${TENSORFLOW_VERSION}")
 else
   PIP_PACKAGES+=("tensorflow==${TENSORFLOW_VERSION}")
 fi
-if [ "$(echo "$DATAPROC_VERSION >= 2.0" | bc)" -eq 1 ]; then
+
+if [[ $(min_version "${DATAPROC_VERSION}" 2.0) == 2.0 ]]; then
   PIP_PACKAGES+=("spark-tensorflow-distributor==0.1.0")
 fi
 readonly PIP_PACKAGES
@@ -110,6 +123,11 @@ function download_init_actions() {
 
 function install_gpu_drivers() {
   "${INIT_ACTIONS_DIR}/gpu/install_gpu_driver.sh"
+  
+  # Install cudnn
+  apt-get update
+  apt-get install --no-install-recommends libcudnn8=${CUDNN_VERSION}+cuda${CUDA_VERSION}  \
+    libcudnn8-dev=${CUDNN_VERSION}+cuda${CUDA_VERSION}
 }
 
 function install_conda_packages() {
@@ -122,6 +140,9 @@ function install_conda_packages() {
 
   conda config --add channels pytorch
   conda config --add channels conda-forge
+  if [[ -n ${INCLUDE_GPUS} ]]; then
+    conda config --add channels nvidia
+  fi
 
   # Create a separate environment with mamba.
   # Mamba provides significant decreases in installation times.
