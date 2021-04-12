@@ -31,11 +31,12 @@ readonly INIT_ACTIONS_DIR=$(mktemp -d -t dataproc-init-actions-XXXX)
 readonly RAPIDS_RUNTIME="$(/usr/share/google/get_metadata_value attributes/rapids-runtime || echo "")"
 readonly INCLUDE_GPUS="$(/usr/share/google/get_metadata_value attributes/include-gpus || echo "")"
 readonly SPARK_BIGQUERY_VERSION="$(/usr/share/google/get_metadata_value attributes/spark-bigquery-connector-version ||
-  echo "0.18.1")"
+  echo "0.19.1")"
+readonly SPARK_CONF_DIR="/etc/spark/conf"
 
 R_VERSION="$(R --version | sed -n 's/.*version[[:blank:]]\+\([0-9]\+\.[0-9]\).*/\1/p')"
 readonly R_VERSION
-readonly SPARK_NLP_VERSION="2.7.2" # Must include subminor version here
+readonly SPARK_NLP_VERSION="3.0.1" # Must include subminor version here
 
 CONDA_PACKAGES=(
   "r-dplyr=1.0"
@@ -97,13 +98,6 @@ function execute_with_retries() {
   done
   echo "Cmd '${cmd}' failed."
   return 1
-}
-
-function download_spark_jar() {
-  local -r url=$1
-  local -r jar_name=${url##*/}
-  curl -fsSL --retry-connrefused --retry 10 --retry-max-time 30 \
-    "${url}" -o "${SPARK_JARS_DIR}/${jar_name}"
 }
 
 function download_init_actions() {
@@ -170,9 +164,14 @@ function install_dask() {
 }
 
 function install_spark_nlp() {
-  local -r name="spark-nlp"
-  local -r repo_url="http://dl.bintray.com/spark-packages/maven/JohnSnowLabs"
-  download_spark_jar "${repo_url}/${name}/${SPARK_NLP_VERSION}/${name}-${SPARK_NLP_VERSION}.jar"
+  local -r spark_conf=${SPARK_CONF_DIR}/spark-defaults.conf
+  local -r spark_nlp_mvn=com.johnsnowlabs.nlp:spark-nlp_2.12:${SPARK_NLP_VERSION}
+
+  if grep -q "spark.jars.packages" ${spark_conf}; then
+    sed -ie "s/^spark.jars.packages=.*$/&,${spark_nlp_mvn}/g" ${spark_conf}
+  else
+    echo "spark.jars.packages=${spark_nlp_mvn}" >> ${spark_conf}
+  fi
 }
 
 function install_connectors() {
@@ -212,7 +211,7 @@ function main() {
 
   # Install Spark Libraries
   echo "Installing Spark-NLP jars"
-  install_spark_nlp
+  # install_spark_nlp
 
   # Install GCP Connectors
   echo "Installing GCP Connectors"
